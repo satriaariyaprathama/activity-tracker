@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import {
   Plus, X, Check, Trash2, Pencil, ChevronLeft, ChevronRight,
   Home, Calendar, CalendarDays, Grid3x3, LayoutGrid, Clock
@@ -48,9 +48,9 @@ function taskToRow(task, userId) {
 /* ---------------------------------------------------------------- */
 
 const STATUS_LIST = ['Planned', 'In Progress', 'Done', 'Skipped', 'Rescheduled'];
-const CATEGORY_LIST = ['College', 'Work', 'Personal', 'Health', 'Errand', 'Social', 'Other'];
+const CATEGORY_LIST = ['College', 'Work', 'Learning', 'Personal', 'Health', 'Hobby', 'Social', 'Errand', 'Other'];
 const PRIORITY_LIST = ['High', 'Medium', 'Low'];
-const PROJECT_SUGGESTIONS = ['College', 'Personal', 'Finance', 'Trading', 'Work', 'Health', 'Errand', 'Social', 'Other'];
+const PROJECT_SUGGESTIONS = ['College', 'Self Learning', 'Work', 'Home', 'Finance', 'Trading', 'Personal Development', 'Fitness', 'Hobby', 'Social', 'Other'];
 const NAV_ITEMS = [
   { key: 'dashboard', label: 'Dashboard', icon: Home },
   { key: 'day', label: 'Day', icon: Calendar },
@@ -152,7 +152,7 @@ function StatusBadge({ status }) {
 }
 
 function StatusToggle({ task, onCycle }) {
-  const order = ['Planned', 'In Progress', 'Done'];
+  const order = ['Planned', 'In Progress', 'Done', 'Skipped', 'Rescheduled'];
   const idx = order.indexOf(task.status);
   const icon = task.status === 'Done' ? <Check size={13} /> : idx === 1 ? <ChevronRight size={13} /> : null;
   return (
@@ -174,6 +174,7 @@ function StatusToggle({ task, onCycle }) {
 function TaskModal({ mode, data, onCancel, onSave, onDelete }) {
   const [form, setForm] = useState(data);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const isCustomCategory = form.category === 'Other';
 
   const submit = (e) => {
     e.preventDefault();
@@ -216,6 +217,16 @@ function TaskModal({ mode, data, onCancel, onSave, onDelete }) {
               {CATEGORY_LIST.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </label>
+          {isCustomCategory && (
+            <label className="field">
+              <span>Custom Category</span>
+              <input
+                value={form.customCategory || ''}
+                onChange={(e) => set('customCategory', e.target.value)}
+                placeholder="e.g. Travel, Vacation, Study Group"
+              />
+            </label>
+          )}
           <label className="field">
             <span>Priority</span>
             <select value={form.priority} onChange={(e) => set('priority', e.target.value)}>
@@ -263,7 +274,7 @@ function TaskModal({ mode, data, onCancel, onSave, onDelete }) {
 /* ---------------------------------------------------------------- */
 
 /* ---------------------------------------------------------------- */
-/* Login screen (email magic link — same login works on any device) */
+/* Login screen (email magic link - same login works on any device) */
 /* ---------------------------------------------------------------- */
 
 function LoginScreen() {
@@ -302,7 +313,7 @@ function LoginScreen() {
             </label>
             {error && <div className="login-error">{error}</div>}
             <button type="submit" className="btn-primary" disabled={busy} style={{ marginTop: 6 }}>
-              {busy ? 'Sending…' : 'Send sign-in link'}
+              {busy ? 'Sending...' : 'Send sign-in link'}
             </button>
           </>
         )}
@@ -407,9 +418,22 @@ export default function ActivityTracker() {
   };
 
   const cycleStatus = (task) => {
-    const order = ['Planned', 'In Progress', 'Done'];
+    const order = ['Planned', 'In Progress', 'Done', 'Skipped', 'Rescheduled'];
     const idx = order.indexOf(task.status);
-    updateTask(task.id, { status: idx === -1 ? 'Planned' : order[(idx + 1) % order.length] });
+    const nextStatus = idx === -1 ? 'Planned' : order[(idx + 1) % order.length];
+
+    if (nextStatus === 'Rescheduled') {
+      setModal({
+        mode: 'edit',
+        data: {
+          ...task,
+          status: 'Rescheduled'
+        }
+      });
+      return;
+    }
+
+    updateTask(task.id, { status: nextStatus });
   };
   const setStatus = (task, status) => updateTask(task.id, { status });
 
@@ -420,13 +444,18 @@ export default function ActivityTracker() {
   const openEdit = (task) => setModal({ mode: 'edit', data: { ...task } });
   const closeModal = () => setModal(null);
   const saveModal = (data) => {
-    if (modal.mode === 'add') addTask(data); else updateTask(data.id, data);
+    const finalData = {
+      ...data,
+      category: data.category === 'Other' && data.customCategory?.trim()
+        ? data.customCategory.trim()
+        : data.category
+    };
+    if (modal.mode === 'add') addTask(finalData); else updateTask(finalData.id, finalData);
     closeModal();
   };
+
   const deleteFromModal = (id) => { deleteTask(id); closeModal(); };
-
   const goToDay = (iso) => { setSelectedDate(iso); setView('day'); };
-
   const todayISO = isoDate(new Date());
   const byDate = (iso) => tasks.filter((t) => t.date === iso).sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
   const todayTasks = byDate(todayISO);
@@ -442,7 +471,7 @@ export default function ActivityTracker() {
     return (
       <div className="planner-root">
         <style>{CSS}</style>
-        <div className="loading-screen">Checking your session…</div>
+        <div className="loading-screen">Checking your session...</div>
       </div>
     );
   }
@@ -460,7 +489,7 @@ export default function ActivityTracker() {
     return (
       <div className="planner-root">
         <style>{CSS}</style>
-        <div className="loading-screen">Loading your planner…</div>
+        <div className="loading-screen">Loading your planner...</div>
       </div>
     );
   }
@@ -539,7 +568,16 @@ export default function ActivityTracker() {
         )}
 
         {view === 'kanban' && (
-          <KanbanView tasks={tasks} onEdit={openEdit} onSetStatus={setStatus} onAdd={() => openAdd(todayISO)} />
+          <KanbanView
+  tasks={tasks}
+  selectedDate={selectedDate}
+  onPrev={() => setSelectedDate(isoDate(addDays(parseISO(selectedDate), -1)))}
+  onNext={() => setSelectedDate(isoDate(addDays(parseISO(selectedDate), 1)))}
+  onToday={() => setSelectedDate(todayISO)}
+  onEdit={openEdit}
+  onSetStatus={setStatus}
+  onAdd={() => openAdd(selectedDate)}
+/>
         )}
       </main>
 
@@ -654,15 +692,20 @@ function DayView({ iso, tasks, onPrev, onNext, onToday, onAdd, onEdit, onCycle }
   return (
     <div className="view">
       <header className="view-head row">
-        <div>
-          <h1>{longDate(iso)}</h1>
-        </div>
-        <div className="day-nav">
-          <button className="icon-btn" onClick={onPrev}><ChevronLeft size={18} /></button>
-          <button className="btn-ghost small" onClick={onToday}>Today</button>
-          <button className="icon-btn" onClick={onNext}><ChevronRight size={18} /></button>
-        </div>
-      </header>
+  <div>
+    <h1>Day</h1>
+    <div className="day-date-nav">
+      <button className="icon-btn" onClick={onPrev}>←</button>
+      <span className="subhead">{longDate(iso)}</span>
+      <button className="icon-btn" onClick={onNext}>→</button>
+      <button className="link-btn" onClick={onToday}>Today</button>
+    </div>
+  </div>
+
+  <button className="link-btn" onClick={onAdd}>
+    <Plus size={14} /> Add Activity
+  </button>
+</header>
 
       <section className="panel">
         <div className="panel-title-row">
@@ -679,7 +722,7 @@ function DayView({ iso, tasks, onPrev, onNext, onToday, onAdd, onEdit, onCycle }
             </div>
             {tasks.map((t) => (
               <div key={t.id} className="day-table-row" onClick={() => onEdit(t)}>
-                <span className="mono">{t.startTime}–{t.endTime}</span>
+                <span className="mono">{t.startTime}-{t.endTime}</span>
                 <span className="task-name">{t.name}</span>
                 <span><Dot color={CATEGORY_COLORS[t.category]} /> {t.category}</span>
                 <span style={{ color: PRIORITY_COLORS[t.priority] }}>{t.priority}</span>
@@ -707,7 +750,7 @@ function WeekView({ anchor, tasksByDate, onPrev, onNext, onToday, onAdd, onEdit,
       <header className="view-head row">
         <div>
           <h1>Week</h1>
-          <p className="subhead">{shortDate(start)} – {shortDate(end)}</p>
+          <p className="subhead">{shortDate(start)} - {shortDate(end)}</p>
         </div>
         <div className="day-nav">
           <button className="icon-btn" onClick={onPrev}><ChevronLeft size={18} /></button>
@@ -729,7 +772,7 @@ function WeekView({ anchor, tasksByDate, onPrev, onNext, onToday, onAdd, onEdit,
               </div>
               <div className="week-col-body">
                 {dayTasks.length === 0 ? (
-                  <span className="week-empty">—</span>
+                  <span className="week-empty">-</span>
                 ) : (
                   dayTasks.map((t) => (
                     <div key={t.id} className="week-task" onClick={() => onEdit(t)}>
@@ -802,9 +845,11 @@ const KANBAN_COLUMNS = [
   { status: 'Planned', title: 'To Do' },
   { status: 'In Progress', title: 'In Progress' },
   { status: 'Done', title: 'Done' },
+  { status: 'Skipped', title: 'Skipped' },
+  { status: 'Rescheduled', title: 'Rescheduled' },
 ];
 
-function KanbanView({ tasks, onEdit, onSetStatus, onAdd }) {
+function KanbanView({ tasks, selectedDate, onPrev, onNext, onToday, onEdit, onSetStatus, onAdd }) {
   const [dragId, setDragId] = useState(null);
 
   const handleDrop = (status) => {
@@ -815,13 +860,24 @@ function KanbanView({ tasks, onEdit, onSetStatus, onAdd }) {
   return (
     <div className="view">
       <header className="view-head row">
-        <h1>Kanban</h1>
-        <button className="link-btn" onClick={onAdd}><Plus size={14} /> Add Activity</button>
-      </header>
+  <div>
+    <h1>Kanban</h1>
+    <div className="kanban-date-nav">
+      <button className="icon-btn" onClick={onPrev}>←</button>
+      <span className="subhead">{longDate(selectedDate)}</span>
+      <button className="icon-btn" onClick={onNext}>→</button>
+      <button className="link-btn" onClick={onToday}>Today</button>
+    </div>
+  </div>
+
+  <button className="link-btn" onClick={onAdd}>
+    <Plus size={14} /> Add Activity
+  </button>
+</header>
 
       <div className="kanban-board">
         {KANBAN_COLUMNS.map((col) => {
-          const items = tasks.filter((t) => t.status === col.status).sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+          const items = tasks.filter((t) => t.status === col.status && (col.status === 'Planned' || col.status === 'In Progress' || t.date === selectedDate)).sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
           return (
             <div
               key={col.status}
@@ -1043,15 +1099,113 @@ const CSS = `
 .month-date-num { font-size: 12.5px; font-weight: 600; }
 .month-count { font-size: 10.5px; font-weight: 700; color: var(--accent); background: var(--accent-soft); border-radius: 20px; padding: 1px 6px; }
 
-.kanban-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; align-items: start; }
-.kanban-col { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; min-height: 200px; }
-.kanban-col-head { display: flex; justify-content: space-between; font-size: 12.5px; font-weight: 700; margin-bottom: 10px; padding: 0 2px; }
-.kanban-col-body { display: flex; flex-direction: column; gap: 8px; }
-.kanban-card { background: var(--bg); border: 1px solid var(--border); border-radius: 9px; padding: 10px; cursor: grab; }
-.kanban-card:active { cursor: grabbing; }
-.kanban-card-top { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
-.kanban-card-name { font-size: 13px; margin-bottom: 6px; }
-.kanban-card-bottom { display: flex; align-items: center; justify-content: space-between; font-size: 11px; font-weight: 600; }
+.kanban-board {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.kanban-col {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 11px;
+  min-height: 180px;
+}
+
+.kanban-col-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12.5px;
+  font-weight: 700;
+  margin-bottom: 10px;
+  padding: 1px 2px;
+}
+
+.kanban-col-body {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.kanban-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 9px;
+  cursor: grab;
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+
+.kanban-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(0,0,0,.06);
+}
+
+.kanban-card:active {
+  cursor: grabbing;
+}
+
+.kanban-card-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+
+.kanban-card-name {
+  font-size: 13px;
+  line-height: 1.35;
+  margin-bottom: 7px;
+}
+
+.kanban-card-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+
+.kanban-date-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.kanban-date-nav .subhead {
+  min-width: 190px;
+  text-align: center;
+}
+
+.kanban-date-nav .icon-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+
+.day-date-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.day-date-nav .subhead {
+  min-width: 190px;
+  text-align: center;
+}
+
+.day-date-nav .icon-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
 
 /* Modal */
 .modal-overlay {
@@ -1111,3 +1265,20 @@ const CSS = `
   .field-row { flex-direction: column; }
 }
 `;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
